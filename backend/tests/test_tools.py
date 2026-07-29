@@ -83,6 +83,19 @@ async def test_local_log_tools_are_confined_to_configured_roots(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_local_disk_and_process_inspection_are_bounded():
+    service = UnixDiagnosticService(Settings())
+
+    disks = json.loads(await service.disk_usage())
+    processes = json.loads(await service.processes(sort_by="memory", limit=3))
+
+    assert disks["host"] == "local"
+    assert isinstance(disks["filesystems"], list)
+    assert processes["sort_by"] == "memory"
+    assert len(processes["processes"]) <= 3
+
+
+@pytest.mark.asyncio
 async def test_tool_access_error_is_a_recoverable_agent_observation(tmp_path):
     service = UnixDiagnosticService(
         Settings(diagnostics_local_log_roots=str(tmp_path))

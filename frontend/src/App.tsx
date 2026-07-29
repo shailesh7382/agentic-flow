@@ -254,7 +254,10 @@ function App() {
                         aria-hidden="true"
                       />
                       <span>
-                        <strong>{tool.name}</strong>
+                        <strong>
+                          {tool.name}
+                          <em>{tool.access}</em>
+                        </strong>
                         <small>{tool.detail}</small>
                       </span>
                     </div>

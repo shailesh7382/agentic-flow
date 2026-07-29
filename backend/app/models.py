@@ -54,7 +54,7 @@ class ToolStatus(BaseModel):
     name: str
     category: Literal["database", "http", "unix"]
     enabled: bool
-    access: Literal["read-only"]
+    access: Literal["read-only", "operator-templated-write", "local-copy"]
     detail: str
 
 

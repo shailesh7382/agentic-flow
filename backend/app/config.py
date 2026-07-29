@@ -19,12 +19,15 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     diagnostics_enabled: bool = True
     diagnostics_max_iterations: int = Field(default=8, ge=1, le=20)
+    diagnostics_max_configured_tools: int = Field(default=64, ge=1, le=256)
     diagnostics_tool_timeout_seconds: float = Field(default=30, ge=1, le=300)
     diagnostics_rest_allowed_hosts: str = "localhost,127.0.0.1"
     diagnostics_rest_max_response_bytes: int = Field(
         default=1_048_576, ge=1024, le=10_485_760
     )
     diagnostics_rest_headers_json: str = "{}"
+    diagnostics_rest_tools_csv: str = "config/rest-tools.csv"
+    diagnostics_rest_template_root: str = "config/rest-templates"
     oracle_dsn: str = ""
     oracle_user: str = ""
     oracle_password: str = ""
@@ -32,6 +35,11 @@ class Settings(BaseSettings):
     diagnostics_local_log_roots: str = "logs,/var/log"
     diagnostics_max_log_bytes: int = Field(default=2_097_152, ge=4096, le=20_971_520)
     diagnostics_unix_hosts_json: str = "{}"
+    diagnostics_unix_hosts_csv: str = "config/unix-hosts.csv"
+    diagnostics_log_download_dir: str = "logs/collected"
+    diagnostics_scp_max_bytes: int = Field(
+        default=10_485_760, ge=4096, le=104_857_600
+    )
     log_level: str = "DEBUG"
     log_file: str = "logs/agentic-flow.log"
     log_max_bytes: int = Field(default=10_485_760, ge=1024)
@@ -84,10 +92,29 @@ class Settings(BaseSettings):
     def oracle_configured(self) -> bool:
         return all((self.oracle_dsn, self.oracle_user, self.oracle_password))
 
+    def backend_path(self, value: str) -> Path:
+        configured = Path(value).expanduser()
+        return configured if configured.is_absolute() else BACKEND_DIR / configured
+
+    @property
+    def rest_tools_csv_path(self) -> Path:
+        return self.backend_path(self.diagnostics_rest_tools_csv)
+
+    @property
+    def rest_template_root(self) -> Path:
+        return self.backend_path(self.diagnostics_rest_template_root)
+
+    @property
+    def unix_hosts_csv_path(self) -> Path:
+        return self.backend_path(self.diagnostics_unix_hosts_csv)
+
+    @property
+    def log_download_dir(self) -> Path:
+        return self.backend_path(self.diagnostics_log_download_dir)
+
     @property
     def log_path(self) -> Path:
-        configured = Path(self.log_file).expanduser()
-        return configured if configured.is_absolute() else BACKEND_DIR / configured
+        return self.backend_path(self.log_file)
 
 
 @lru_cache

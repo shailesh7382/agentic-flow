@@ -1,0 +1,3 @@
+name,description,method,base_url,template_file,timeout_seconds,max_response_bytes,enabled
+get_orders_health,Read the orders service health payload,GET,https://orders.example.internal,orders-health.json,15,262144,false
+search_incidents,Search the incident API using a constrained JSON request,POST,https://diagnostics.example.internal,incident-search.json,30,1048576,false

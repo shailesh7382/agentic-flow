@@ -66,11 +66,12 @@ flowchart LR
     F --> G["LangGraph workflow"]
     G -->|"general tasks"| C["OpenAI-compatible client"]
     G -->|"diagnose"| A["LangChain diagnostic agent"]
-    A --> R["Read-only tool registry"]
+    A --> R["Capability-scoped tool registry"]
     R --> O["Oracle SELECT"]
-    R --> H["Allowlisted HTTP(S) GET / HEAD"]
-    R --> X["Local or SSH Unix inspection"]
-    R --> Z["Bounded log tail / search"]
+    R --> H["Generic allowlisted HTTP(S) GET / HEAD"]
+    R --> T["CSV-defined GET / templated POST tools"]
+    R --> X["Local or host-bound SSH diagnostics"]
+    R --> Z["Bounded log read / search / secure copy"]
     C --> E["Configured model endpoint"]
     A --> E
     E --> L["LM Studio or remote OpenAI-compatible model"]
@@ -113,10 +114,10 @@ flowchart TD
     A --> D{"Enough evidence?"}
     D -->|"No"| T{"Choose an enabled tool"}
     T -->|"database"| O["oracle_select"]
-    T -->|"API"| R["rest_api_read"]
-    T -->|"host"| S["unix_system_snapshot"]
-    T -->|"service"| V["unix_service_status"]
-    T -->|"logs"| L["unix_tail_log / unix_search_log"]
+    T -->|"API"| R["Generic or CSV-defined REST tool"]
+    T -->|"host"| S["Snapshot / disks / processes"]
+    T -->|"service"| V["Bound service-status tool"]
+    T -->|"logs"| L["Tail / search / fetch tool"]
     O --> A
     R --> A
     S --> A
@@ -138,7 +139,7 @@ sequenceDiagram
     participant API as FastAPI
     participant Graph as LangGraph
     participant Agent as LangChain diagnostics agent
-    participant Tool as Read-only diagnostic tool
+    participant Tool as Capability-scoped diagnostic tool
     participant LM as Model endpoint
 
     UI->>API: POST /api/runs
@@ -184,8 +185,14 @@ without polling.
 │   │   └── tools/
 │   │       ├── oracle.py   # Parsed, row-capped SELECT / WITH queries
 │   │       ├── rest_api.py # Allowlisted GET / HEAD requests
+│   │       ├── rest_catalog.py # CSV and JSON-templated GET / POST tools
 │   │       ├── unix.py     # Fixed local and SSH inspection operations
+│   │       ├── unix_catalog.py # CSV-defined host inventory
 │   │       └── registry.py # Tool enablement and public status
+│   ├── config/
+│   │   ├── rest-tools.csv  # One row per separately registered REST tool
+│   │   ├── rest-templates/ # Typed path, query, header, and JSON body templates
+│   │   └── unix-hosts.csv  # SSH aliases and enabled host capabilities
 │   ├── tests/
 │   └── pyproject.toml
 ├── frontend/
@@ -216,10 +223,13 @@ Edit `backend/.env` after running setup:
 | `CORS_ORIGINS` | local Vite origins | Comma-separated allowed browser origins |
 | `DIAGNOSTICS_ENABLED` | `true` | Master switch for all diagnostic tools |
 | `DIAGNOSTICS_MAX_ITERATIONS` | `8` | Maximum model/tool investigation iterations |
+| `DIAGNOSTICS_MAX_CONFIGURED_TOOLS` | `64` | Maximum registered tools, including generated ones |
 | `DIAGNOSTICS_TOOL_TIMEOUT_SECONDS` | `30` | Per-tool timeout |
 | `DIAGNOSTICS_REST_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Exact hosts or `*.domain` patterns |
 | `DIAGNOSTICS_REST_MAX_RESPONSE_BYTES` | `1048576` | Maximum HTTP response body retained |
 | `DIAGNOSTICS_REST_HEADERS_JSON` | `{}` | Operator-supplied headers; use secrets carefully |
+| `DIAGNOSTICS_REST_TOOLS_CSV` | `config/rest-tools.csv` | REST operation catalog |
+| `DIAGNOSTICS_REST_TEMPLATE_ROOT` | `config/rest-templates` | Permitted JSON-template directory |
 | `ORACLE_DSN` | empty | Oracle Easy Connect string or configured alias |
 | `ORACLE_USER` | empty | Oracle diagnostic account |
 | `ORACLE_PASSWORD` | empty | Oracle diagnostic account password |
@@ -227,6 +237,9 @@ Edit `backend/.env` after running setup:
 | `DIAGNOSTICS_LOCAL_LOG_ROOTS` | `logs,/var/log` | Local paths the log tools may inspect |
 | `DIAGNOSTICS_MAX_LOG_BYTES` | `2097152` | Maximum trailing log window searched |
 | `DIAGNOSTICS_UNIX_HOSTS_JSON` | `{}` | Named SSH targets and their allowed log roots |
+| `DIAGNOSTICS_UNIX_HOSTS_CSV` | `config/unix-hosts.csv` | CSV SSH host inventory |
+| `DIAGNOSTICS_LOG_DOWNLOAD_DIR` | `logs/collected` | Server-controlled destination for fetched logs |
+| `DIAGNOSTICS_SCP_MAX_BYTES` | `10485760` | Maximum trailing bytes copied from one remote log |
 | `LOG_LEVEL` | `DEBUG` | Minimum severity written to the log file |
 | `LOG_FILE` | `logs/agentic-flow.log` | Absolute path or path relative to `backend/` |
 | `LOG_MAX_BYTES` | `10485760` | Rotate the active log after this many bytes |
@@ -240,12 +253,18 @@ validation. The execution and revision stages use the configured creative temper
 ## Diagnostics configuration
 
 The diagnostic agent receives only tools enabled by backend configuration. The UI shows their
-current status when **Software diagnostics** is selected, and `GET /api/tools` exposes the same
-read-only status to operators.
+current status and access mode when **Software diagnostics** is selected, and `GET /api/tools`
+exposes the same status to operators. Access modes are `read-only`,
+`operator-templated-write`, and `local-copy`.
 
 ### REST API inspection
 
-Only `GET` and `HEAD` are supported. Redirects are returned as observations but never followed,
+There are two REST modes:
+
+1. `rest_api_read` supports generic `GET` and `HEAD` against a hostname allowlist.
+2. The CSV catalog creates a distinct LangChain tool for every enabled `GET` or `POST` row.
+
+The generic tool never performs POST. Redirects are returned as observations but never followed,
 credentials embedded in URLs are rejected, and every destination must match the host allowlist.
 
 ```dotenv
@@ -256,6 +275,76 @@ DIAGNOSTICS_REST_MAX_RESPONSE_BYTES=1048576
 
 An allowlist entry matches only the hostname, not arbitrary lookalike suffixes.
 `*.svc.internal` matches `orders.svc.internal` but not `svc.internal`.
+
+#### CSV-defined REST tools
+
+Edit `backend/config/rest-tools.csv`:
+
+```csv
+name,description,method,base_url,template_file,timeout_seconds,max_response_bytes,enabled
+get_orders_health,Read orders health,GET,https://orders.internal,orders-health.json,15,262144,true
+search_incidents,Search incidents,POST,https://diagnostics.internal,incident-search.json,30,1048576,true
+```
+
+Each enabled row becomes a separately named tool such as `get_orders_health` or
+`search_incidents`. Names must be unique and contain only letters, numbers, `_`, or `-`.
+Only `GET` and `POST` are accepted. The base URL cannot contain credentials, query parameters, or
+a fragment. Response size and timeout are bounded per row, and redirects are not followed.
+
+The referenced template must remain under `DIAGNOSTICS_REST_TEMPLATE_ROOT`. A template defines
+the only path, query, headers, environment-backed secret headers, JSON body, and model-supplied
+variables the operation may use:
+
+```json
+{
+  "path": "/api/v1/incidents/search",
+  "query": {},
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+  },
+  "header_env": {
+    "Authorization": "DIAGNOSTICS_INCIDENT_API_AUTHORIZATION"
+  },
+  "body": {
+    "service": "{{service}}",
+    "environment": "{{environment}}",
+    "limit": "{{limit}}"
+  },
+  "variables": {
+    "service": {
+      "type": "string",
+      "description": "Service identifier",
+      "required": true,
+      "min_length": 2,
+      "max_length": 100
+    },
+    "environment": {
+      "type": "string",
+      "required": true,
+      "enum": ["staging", "production"]
+    },
+    "limit": {
+      "type": "integer",
+      "required": false,
+      "default": 50,
+      "minimum": 1,
+      "maximum": 200
+    }
+  }
+}
+```
+
+Variables support `string`, `integer`, `number`, and `boolean`, plus enums, ranges, lengths, and
+string patterns. These definitions generate the LangChain/Pydantic input schema, so invalid model
+arguments are rejected before an HTTP call. An exact `"{{limit}}"` placeholder preserves the
+integer type instead of converting it to text. Path variables are URL-encoded.
+
+`header_env` maps a header name to an environment-variable name. The secret value stays outside
+CSV, JSON, tool schemas, prompts, and tool-call logs. A missing environment variable becomes a
+recoverable observation. POST tools are labelled `operator-templated-write` because even a
+diagnostic POST can have upstream side effects; enable only idempotent or otherwise approved
+operations.
 
 ### Oracle inspection
 
@@ -280,21 +369,44 @@ separately, applies a call timeout, and caps returned rows.
 ### Unix hosts, services, and logs
 
 Local inspection is enabled by default and is limited to fixed operations: a system snapshot,
-bounded tail, literal log search, and systemd status/journal lookup. There is no arbitrary shell
-tool. Local log paths must remain under `DIAGNOSTICS_LOCAL_LOG_ROOTS`.
+filesystem usage, bounded process listing, bounded tail, literal log search, and systemd
+status/journal lookup. There is no arbitrary shell tool. Local log paths must remain under
+`DIAGNOSTICS_LOCAL_LOG_ROOTS`.
 
-Remote access uses operator-defined aliases. The model chooses an alias such as `prod-app-1`; it
-never supplies a hostname, username, key, or arbitrary command. Host-key verification and allowed
-log roots are mandatory:
+Remote access uses operator-defined aliases. Every CSV host generates separate host-bound tools,
+for example `orders_prod_1_disk_usage`, `orders_prod_1_processes`,
+`orders_prod_1_tail_log`, and `orders_prod_1_fetch_log`. The model cannot supply a hostname,
+username, key, or arbitrary command. Host-key verification and allowed log roots are mandatory.
 
-```dotenv
-DIAGNOSTICS_LOCAL_LOG_ROOTS=logs,/var/log/my-company
-DIAGNOSTICS_UNIX_HOSTS_JSON={"prod-app-1":{"host":"10.20.0.15","port":22,"username":"diagnostic","client_keys":["/secure/keys/diagnostic_ed25519"],"known_hosts":"/secure/ssh/known_hosts","log_roots":["/var/log/order-api"]}}
+Edit `backend/config/unix-hosts.csv`:
+
+```csv
+name,host,port,username,client_keys,known_hosts,password_env,log_roots,capabilities,enabled
+orders_prod_1,10.20.0.15,22,diagnostic,/secure/keys/diagnostic_ed25519,/secure/ssh/known_hosts,,/var/log/order-api,snapshot;disks;processes;tail;search;fetch;service,true
 ```
 
-Give the SSH identity read-only filesystem permissions and only the operating-system permissions
-needed for service inspection. Password authentication is supported in configuration but SSH
-keys with a restricted account are preferred.
+Multiple key paths and log roots use `;` separators. `capabilities` controls exactly which tools
+are generated:
+
+| Capability | Generated operation |
+| --- | --- |
+| `snapshot` | Uptime, load, memory, disk summary, and top processes |
+| `disks` | Fixed `df`-style filesystem inspection |
+| `processes` | Bounded process list sorted by CPU or memory |
+| `tail` | Bounded tail under an allowed log root |
+| `search` | Literal search within the trailing configured byte window |
+| `fetch` | Bounded SFTP copy into `DIAGNOSTICS_LOG_DOWNLOAD_DIR/<alias>/` |
+| `service` | Fixed systemd status and recent journal inspection |
+
+The fetch operation copies at most `DIAGNOSTICS_SCP_MAX_BYTES`, keeps the destination under a
+server-controlled directory, and is labelled `local-copy`. It uses AsyncSSH SFTP rather than
+invoking an operating-system `scp` command, which preserves size limits and avoids a shell.
+
+`password_env` may name an environment variable, but key authentication with a restricted
+diagnostic account is preferred. Give that identity read-only remote filesystem permissions and
+only the operating-system permissions needed for service inspection. The older
+`DIAGNOSTICS_UNIX_HOSTS_JSON` format remains supported and is merged with the CSV inventory;
+duplicate aliases fail startup.
 
 ### Model endpoints
 
@@ -409,7 +521,7 @@ Returns the task templates used to construct the frontend cards and starter prom
 ### `GET /api/tools`
 
 Returns every diagnostic capability, its category, whether it is currently enabled, its
-read-only access mode, and a non-secret configuration summary.
+access mode, and a non-secret configuration summary.
 
 ```json
 [
@@ -501,8 +613,9 @@ npm --prefix frontend run build
   individual graph nodes, model calls, and diagnostic operations without depending on a hosted
   observability service.
 - **Capability-based diagnostic access:** the model can choose only registered tools. Oracle is
-  query-only and row-capped, REST is allowlisted and read-only, Unix access uses named targets and
-  fixed inspection commands, and log access is root-confined and bounded.
+  query-only and row-capped; generic REST is allowlisted and read-only; POST destinations and
+  payloads come only from operator templates; Unix access uses host-bound, fixed inspection
+  operations; and log reads and copies are root-confined and bounded.
 
 ## Troubleshooting
 
@@ -536,8 +649,8 @@ proxy target in `frontend/vite.config.ts`.
 
 Check `curl http://127.0.0.1:8000/api/tools`, update `backend/.env`, and restart the backend.
 Oracle requires all three connection settings. REST requires a non-empty allowed-host list.
-Remote Unix inspection requires a named host entry with `host`, `username`, `known_hosts`, and
-`log_roots`.
+CSV REST tools require `enabled=true` and a valid JSON template. Remote Unix inspection requires
+an enabled host row with `host`, `username`, `known_hosts`, and `log_roots`.
 
 ### The model describes checks but does not call tools
 

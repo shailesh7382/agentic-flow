@@ -77,6 +77,8 @@ def test_diagnostic_tool_statuses_are_available():
         "oracle_select",
         "rest_api_read",
         "unix_system_snapshot",
+        "unix_disk_usage",
+        "unix_processes",
         "unix_tail_log",
         "unix_search_log",
         "unix_service_status",

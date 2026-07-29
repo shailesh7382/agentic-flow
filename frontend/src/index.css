@@ -308,10 +308,27 @@ main {
 }
 
 .tool-status-item strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
   overflow-wrap: anywhere;
   color: #334155;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
+}
+
+.tool-status-item strong em {
+  padding: 2px 5px;
+  border: 1px solid #c8d5e5;
+  border-radius: 999px;
+  color: #66758a;
+  background: #f8fafd;
+  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .tool-status-item small,

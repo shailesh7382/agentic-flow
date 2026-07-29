@@ -1,0 +1,25 @@
+{
+  "path": "/api/v1/health/{{component}}",
+  "query": {
+    "verbose": "{{verbose}}"
+  },
+  "headers": {
+    "Accept": "application/json"
+  },
+  "variables": {
+    "component": {
+      "type": "string",
+      "description": "Configured application component identifier.",
+      "required": true,
+      "min_length": 2,
+      "max_length": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "verbose": {
+      "type": "boolean",
+      "description": "Request dependency-level health details.",
+      "required": false,
+      "default": false
+    }
+  }
+}

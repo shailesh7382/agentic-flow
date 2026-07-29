@@ -1,0 +1,2 @@
+name,host,port,username,client_keys,known_hosts,password_env,log_roots,capabilities,enabled
+orders_prod_1,10.20.0.15,22,diagnostic,/secure/keys/diagnostic_ed25519,/secure/ssh/known_hosts,,/var/log/order-api,snapshot;disks;processes;tail;search;fetch;service,false

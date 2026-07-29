@@ -1,3 +1,4 @@
+from time import perf_counter
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -63,6 +64,7 @@ class RestDiagnosticService:
         }
 
         async def execute() -> str:
+            request_started = perf_counter()
             timeout = httpx.Timeout(self.settings.diagnostics_tool_timeout_seconds)
             async with (
                 httpx.AsyncClient(
@@ -95,7 +97,7 @@ class RestDiagnosticService:
                     reason=response.reason_phrase,
                     url=str(response.url),
                     content_type=content_type,
-                    elapsed_ms=round(response.elapsed.total_seconds() * 1000, 2),
+                    elapsed_ms=round((perf_counter() - request_started) * 1000, 2),
                     redirected=response.is_redirect,
                     location=response.headers.get("location"),
                     body=text,

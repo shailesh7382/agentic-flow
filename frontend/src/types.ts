@@ -20,7 +20,7 @@ export type ToolStatus = {
   name: string;
   category: "database" | "http" | "unix";
   enabled: boolean;
-  access: "read-only";
+  access: "read-only" | "operator-templated-write" | "local-copy";
   detail: string;
 };
 
