@@ -50,7 +50,14 @@ class HealthResponse(BaseModel):
     detail: str | None = None
 
 
+class ToolStatus(BaseModel):
+    name: str
+    category: Literal["database", "http", "unix"]
+    enabled: bool
+    access: Literal["read-only"]
+    detail: str
+
+
 class StreamEvent(BaseModel):
     event: Literal["run", "step", "result", "error", "done"]
     data: dict[str, Any]
-

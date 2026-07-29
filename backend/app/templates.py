@@ -2,6 +2,26 @@ from .models import TaskTemplate
 
 TASK_TEMPLATES = [
     TaskTemplate(
+        id="diagnose",
+        title="Software diagnostics",
+        description="Investigate services using live database, API, server, and log evidence.",
+        icon="activity",
+        prompt_label="What system problem should the agent diagnose?",
+        placeholder=(
+            "Describe the symptom, affected service, time window, hosts, API endpoints, "
+            "database indicators, and what changed…"
+        ),
+        starter=(
+            "Investigate why the order API is returning elevated 5xx responses. Check service "
+            "health, recent logs, upstream REST dependencies, and relevant Oracle indicators. "
+            "Build an evidence-backed diagnosis and remediation plan."
+        ),
+        output_hint=(
+            "An evidence-backed incident diagnosis with observations, likely causes, confidence, "
+            "and safe remediation steps."
+        ),
+    ),
+    TaskTemplate(
         id="write",
         title="Write & refine",
         description="Create polished content for a specific audience and outcome.",
@@ -81,4 +101,3 @@ TASK_TEMPLATES = [
 ]
 
 TASKS_BY_ID = {task.id: task for task in TASK_TEMPLATES}
-

@@ -58,6 +58,7 @@ def test_tasks_are_available():
         response = client.get("/api/tasks")
     assert response.status_code == 200
     assert {task["id"] for task in response.json()} == {
+        "diagnose",
         "write",
         "analyze",
         "plan",
@@ -65,6 +66,22 @@ def test_tasks_are_available():
         "brainstorm",
         "summarize",
     }
+
+
+def test_diagnostic_tool_statuses_are_available():
+    app = create_app(FakeWorkflow())
+    with TestClient(app) as client:
+        response = client.get("/api/tools")
+    assert response.status_code == 200
+    assert {tool["name"] for tool in response.json()} == {
+        "oracle_select",
+        "rest_api_read",
+        "unix_system_snapshot",
+        "unix_tail_log",
+        "unix_search_log",
+        "unix_service_status",
+    }
+    assert all(tool["access"] == "read-only" for tool in response.json())
 
 
 def test_unknown_task_is_rejected():

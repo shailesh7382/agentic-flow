@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .config import get_settings
+from .diagnostics import DiagnosticAgent
 from .graph import AgentWorkflow
 from .llm import LMStudioClient, LMStudioError
 from .logging_config import (
@@ -25,8 +26,9 @@ from .logging_config import (
     set_request_id,
     set_run_id,
 )
-from .models import HealthResponse, RunRequest, TaskTemplate
+from .models import HealthResponse, RunRequest, TaskTemplate, ToolStatus
 from .templates import TASK_TEMPLATES, TASKS_BY_ID
+from .tools import DiagnosticToolRegistry
 
 logger = logging.getLogger("agentic_flow.api")
 
@@ -39,12 +41,17 @@ def create_app(workflow: AgentWorkflow | None = None) -> FastAPI:
     settings = get_settings()
     log_path = configure_logging(settings)
     llm = LMStudioClient(settings)
+    tool_registry = DiagnosticToolRegistry(settings)
+    diagnostic_agent = DiagnosticAgent(settings, llm, tool_registry)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         started = perf_counter()
-        app.state.workflow = workflow or AgentWorkflow(llm, settings)
+        app.state.workflow = workflow or AgentWorkflow(
+            llm, settings, diagnostic_runner=diagnostic_agent
+        )
         app.state.llm = llm
+        app.state.tool_registry = tool_registry
         log_event(
             logger,
             logging.INFO,
@@ -55,12 +62,27 @@ def create_app(workflow: AgentWorkflow | None = None) -> FastAPI:
             configured_model=settings.lmstudio_model or None,
             cors_origins=settings.allowed_origins,
             log_include_content=settings.log_include_content,
+            diagnostic_tools=[
+                status.model_dump() for status in tool_registry.statuses
+            ],
             runtime={
                 "python": platform.python_version(),
                 "platform": platform.platform(),
                 "packages": {
                     package: version(package)
-                    for package in ("fastapi", "langgraph", "openai", "pydantic", "uvicorn")
+                    for package in (
+                        "asyncssh",
+                        "fastapi",
+                        "langchain",
+                        "langchain-openai",
+                        "langgraph",
+                        "openai",
+                        "oracledb",
+                        "psutil",
+                        "pydantic",
+                        "sqlglot",
+                        "uvicorn",
+                    )
                 },
             },
         )
@@ -203,6 +225,18 @@ def create_app(workflow: AgentWorkflow | None = None) -> FastAPI:
             task_ids=[task.id for task in TASK_TEMPLATES],
         )
         return TASK_TEMPLATES
+
+    @app.get("/api/tools", response_model=list[ToolStatus])
+    async def tools(request: Request) -> list[ToolStatus]:
+        statuses = request.app.state.tool_registry.statuses
+        log_event(
+            logger,
+            logging.DEBUG,
+            "api.tools.listed",
+            "Diagnostic tool statuses returned",
+            tools=[status.model_dump() for status in statuses],
+        )
+        return statuses
 
     @app.post("/api/runs")
     async def run_agent(payload: RunRequest, request: Request) -> StreamingResponse:

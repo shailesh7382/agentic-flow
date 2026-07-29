@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlignLeft,
   ArrowRight,
   Braces,
@@ -14,16 +15,18 @@ import {
   PenLine,
   RotateCcw,
   Server,
+  ShieldCheck,
   Sparkles,
   WandSparkles,
   X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getHealth, getTasks, streamRun } from "./api";
+import { getHealth, getTasks, getTools, streamRun } from "./api";
 import type { AgentEvent, RunResult, StepUpdate, TaskTemplate } from "./types";
 
 const ICONS = {
+  activity: Activity,
   "pen-line": PenLine,
   "chart-no-axes-combined": ChartNoAxesCombined,
   map: Map,
@@ -32,7 +35,7 @@ const ICONS = {
   "align-left": AlignLeft,
 } as const;
 
-const FLOW = [
+const DEFAULT_FLOW = [
   { id: "intake", label: "Understanding the task" },
   { id: "plan", label: "Building an approach" },
   { id: "execute", label: "Creating the first draft" },
@@ -41,12 +44,26 @@ const FLOW = [
   { id: "finalize", label: "Preparing the answer" },
 ];
 
+const DIAGNOSTIC_FLOW = [
+  { id: "intake", label: "Understanding the incident" },
+  { id: "plan", label: "Planning evidence collection" },
+  { id: "execute", label: "Running diagnostic tools" },
+  { id: "critique", label: "Validating the diagnosis" },
+  { id: "revise", label: "Correcting the diagnosis", optional: true },
+  { id: "finalize", label: "Preparing the incident report" },
+];
+
 function App() {
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: getTasks });
   const healthQuery = useQuery({
     queryKey: ["health"],
     queryFn: getHealth,
     refetchInterval: 15_000,
+  });
+  const toolsQuery = useQuery({
+    queryKey: ["tools"],
+    queryFn: getTools,
+    refetchInterval: 30_000,
   });
   const [selectedId, setSelectedId] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -150,7 +167,8 @@ function App() {
 
   const connected = healthQuery.data?.lmstudio === "connected";
   const completedIds = new Set(steps.map((step) => step.id));
-  const currentIndex = Math.min(steps.length, FLOW.length - 1);
+  const activeFlow = selected?.id === "diagnose" ? DIAGNOSTIC_FLOW : DEFAULT_FLOW;
+  const currentIndex = Math.min(steps.length, activeFlow.length - 1);
 
   return (
     <div className="app-shell">
@@ -217,6 +235,37 @@ function App() {
               </div>
             </div>
 
+            {selected?.id === "diagnose" && (
+              <div className="tool-status-panel">
+                <div className="tool-status-heading">
+                  <span>
+                    <ShieldCheck size={17} />
+                    Read-only diagnostic access
+                  </span>
+                  <small>
+                    {(toolsQuery.data ?? []).filter((tool) => tool.enabled).length} enabled
+                  </small>
+                </div>
+                <div className="tool-status-grid">
+                  {(toolsQuery.data ?? []).map((tool) => (
+                    <div className="tool-status-item" key={tool.name}>
+                      <span
+                        className={`tool-status-dot ${tool.enabled ? "enabled" : ""}`}
+                        aria-hidden="true"
+                      />
+                      <span>
+                        <strong>{tool.name}</strong>
+                        <small>{tool.detail}</small>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {toolsQuery.isError && (
+                  <p className="tool-status-error">Tool availability could not be loaded.</p>
+                )}
+              </div>
+            )}
+
             <div className="composer-card">
               <label htmlFor="prompt">{selected?.prompt_label ?? "What should the agent do?"}</label>
               <textarea
@@ -269,7 +318,7 @@ function App() {
                     <Server size={15} />
                   </span>
                   <span>
-                    Sent only to <strong>your local LM Studio server</strong>
+                    Uses the <strong>backend-configured model endpoint</strong>
                   </span>
                 </div>
                 {running ? (
@@ -301,7 +350,7 @@ function App() {
               </div>
 
               <div className="flow-track">
-                {FLOW.filter((item) => !item.optional || completedIds.has(item.id)).map(
+                {activeFlow.filter((item) => !item.optional || completedIds.has(item.id)).map(
                   (item, index, shownFlow) => {
                     const complete = completedIds.has(item.id);
                     const active = running && !complete && index === currentIndex;

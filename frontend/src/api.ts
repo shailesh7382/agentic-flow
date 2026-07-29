@@ -1,4 +1,4 @@
-import type { AgentEvent, Health, RunPayload, TaskTemplate } from "./types";
+import type { AgentEvent, Health, RunPayload, TaskTemplate, ToolStatus } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
@@ -10,6 +10,7 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const getTasks = () => getJson<TaskTemplate[]>("/api/tasks");
 export const getHealth = () => getJson<Health>("/api/health");
+export const getTools = () => getJson<ToolStatus[]>("/api/tools");
 
 function decodeEvent(block: string): AgentEvent | null {
   const lines = block.split(/\r?\n/);
@@ -65,4 +66,3 @@ export async function streamRun(
     if (parsed) onEvent(parsed);
   }
 }
-

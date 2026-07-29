@@ -16,6 +16,14 @@ export type Health = {
   detail: string | null;
 };
 
+export type ToolStatus = {
+  name: string;
+  category: "database" | "http" | "unix";
+  enabled: boolean;
+  access: "read-only";
+  detail: string;
+};
+
 export type PlanStep = {
   title: string;
   purpose: string;
@@ -57,4 +65,3 @@ export type AgentEvent =
   | { event: "result"; data: RunResult }
   | { event: "error"; data: { run_id: string; message: string } }
   | { event: "done"; data: { run_id: string } };
-

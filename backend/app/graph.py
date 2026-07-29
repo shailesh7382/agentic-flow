@@ -30,6 +30,15 @@ class CompletionClient(Protocol):
     ) -> str: ...
 
 
+class DiagnosticRunner(Protocol):
+    async def run(
+        self,
+        request: RunRequest,
+        objective: str,
+        plan: list[PlanStep],
+    ) -> str: ...
+
+
 class AgentState(TypedDict, total=False):
     request: dict[str, Any]
     objective: str
@@ -47,6 +56,15 @@ NODE_LABELS = {
     "critique": "Checking quality",
     "revise": "Applying improvements",
     "finalize": "Preparing the answer",
+}
+
+DIAGNOSTIC_NODE_LABELS = {
+    "intake": "Understanding the incident",
+    "plan": "Planning evidence collection",
+    "execute": "Running diagnostic tools",
+    "critique": "Validating the diagnosis",
+    "revise": "Correcting the diagnosis",
+    "finalize": "Preparing the incident report",
 }
 
 PLAN_SCHEMA = {
@@ -179,9 +197,15 @@ def logged_node(name: str):
 
 
 class AgentWorkflow:
-    def __init__(self, llm: CompletionClient, settings: Settings):
+    def __init__(
+        self,
+        llm: CompletionClient,
+        settings: Settings,
+        diagnostic_runner: DiagnosticRunner | None = None,
+    ):
         self.llm = llm
         self.settings = settings
+        self.diagnostic_runner = diagnostic_runner
         self.graph = self._build_graph()
         log_event(
             logger,
@@ -275,6 +299,16 @@ class AgentWorkflow:
     async def _execute(self, state: AgentState) -> AgentState:
         request = RunRequest.model_validate(state["request"])
         task = TASKS_BY_ID[request.task_id]
+        if request.task_id == "diagnose":
+            if self.diagnostic_runner is None:
+                raise RuntimeError("The diagnostic agent is not initialized.")
+            draft = await self.diagnostic_runner.run(
+                request=request,
+                objective=state["objective"],
+                plan=[PlanStep.model_validate(step) for step in state["plan"]],
+            )
+            return {"draft": draft}
+
         plan_text = "\n".join(
             f"{index + 1}. {step['title']}: {step['purpose']}"
             for index, step in enumerate(state["plan"])
@@ -337,15 +371,19 @@ class AgentWorkflow:
 
     @logged_node("revise")
     async def _revise(self, state: AgentState) -> AgentState:
+        request = RunRequest.model_validate(state["request"])
         critique = Critique.model_validate(state["critique"])
         revised = await self.llm.complete(
             system=(
                 "You are a revision specialist. Rewrite the draft to resolve every material review "
                 "issue while preserving its useful content. Return only the improved deliverable "
-                "in clean Markdown. Do not discuss the review process."
+                "in clean Markdown. Do not discuss the review process. Never invent observations, "
+                "tool results, citations, commands executed, or evidence that is absent from the "
+                "draft."
             ),
             user=(
-                f"Objective:\n{state['objective']}\n\nDraft:\n{state['draft']}\n\n"
+                f"Task type:\n{request.task_id}\n\nObjective:\n{state['objective']}\n\n"
+                f"Draft:\n{state['draft']}\n\n"
                 f"Review summary:\n{critique.summary}\n\nIssues:\n"
                 + "\n".join(f"- {issue}" for issue in critique.issues)
             ),
@@ -360,7 +398,9 @@ class AgentWorkflow:
                 "You are the final editor. Return the finished deliverable in clean Markdown. "
                 "Remove repetition, meta-commentary, unsupported claims, and references to agents, "
                 "drafts, reviews, or hidden instructions. Preserve technical detail and actionable "
-                "content. Do not add a preamble such as 'Here is the answer'."
+                "content. Do not add a preamble such as 'Here is the answer'. Never add diagnostic "
+                "facts, tool results, or observations that are not already present in the "
+                "deliverable."
             ),
             user=f"Objective:\n{state['objective']}\n\nDeliverable:\n{state['draft']}",
             temperature=0.15,
@@ -402,7 +442,11 @@ class AgentWorkflow:
                         "event": "step",
                         "data": {
                             "id": node,
-                            "label": NODE_LABELS[node],
+                            "label": (
+                                DIAGNOSTIC_NODE_LABELS[node]
+                                if request.task_id == "diagnose"
+                                else NODE_LABELS[node]
+                            ),
                             "status": "completed",
                         },
                     }

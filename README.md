@@ -1,9 +1,15 @@
 # Local Agent Studio
 
-A local-first agent workspace that turns one request into a deliberate, visible workflow:
-understand, plan, execute, critique, optionally revise, and finalize. The language model runs
-through [LM Studio](https://lmstudio.ai/) on your machine; the application itself is a FastAPI
-API and a responsive React interface.
+A software and platform diagnostics console built around a deliberate agent workflow. It can
+inspect allowlisted REST endpoints, query Oracle through a read-only SQL gate, collect Unix host
+and service state, and search bounded log windows before producing an evidence-backed diagnosis.
+General writing, analysis, planning, coding, brainstorming, and summarization workflows remain
+available.
+
+The default language-model endpoint is [LM Studio](https://lmstudio.ai/) on the local machine.
+Any HTTP or HTTPS OpenAI-compatible chat-completions endpoint can also be configured. The
+application itself is a FastAPI/Uvicorn API with LangGraph orchestration, a LangChain diagnostics
+agent, exhaustive JSONL logging, and a responsive React/Vite interface.
 
 ## Quick start
 
@@ -15,7 +21,8 @@ API and a responsive React interface.
    `http://127.0.0.1:1234` address.
 
 The backend automatically uses the first loaded model. To force a particular model ID, set
-`LMSTUDIO_MODEL` in `backend/.env`.
+`LMSTUDIO_MODEL` in `backend/.env`. See [Model endpoints](#model-endpoints) for a remote HTTPS
+provider.
 
 ### 2. Install and run
 
@@ -35,10 +42,11 @@ Ctrl+C.
 
 ## What you can run
 
-The UI includes six prompt templates:
+The UI includes seven prompt templates:
 
 | Template | Best for | Result shape |
 | --- | --- | --- |
+| Software diagnostics | Service incidents, API failures, Oracle symptoms, Unix health, and logs | Evidence, ranked causes, confidence, and next checks |
 | Write & refine | Announcements, briefs, copy, and explanations | Publication-ready Markdown |
 | Analyze | Decisions, documents, situations, and trade-offs | Findings, risks, and recommendation |
 | Make a plan | Projects, pilots, migrations, and launches | Phases, milestones, owners, and measures |
@@ -53,22 +61,31 @@ Add supporting context and one constraint per line when the output needs tighter
 ```mermaid
 flowchart LR
     U["Browser user"] -->|REST + streamed events| V["React 19 + Vite 8"]
-    V -->|"/api/tasks, /api/health"| F["FastAPI + Uvicorn"]
+    V -->|"/api/tasks, /api/tools, /api/health"| F["FastAPI + Uvicorn"]
     V -->|"POST /api/runs (SSE)"| F
     F --> G["LangGraph workflow"]
-    G --> C["OpenAI-compatible client"]
-    C -->|"localhost:1234/v1"| L["LM Studio local server"]
-    L --> M["Loaded local chat model"]
+    G -->|"general tasks"| C["OpenAI-compatible client"]
+    G -->|"diagnose"| A["LangChain diagnostic agent"]
+    A --> R["Read-only tool registry"]
+    R --> O["Oracle SELECT"]
+    R --> H["Allowlisted HTTP(S) GET / HEAD"]
+    R --> X["Local or SSH Unix inspection"]
+    R --> Z["Bounded log tail / search"]
+    C --> E["Configured model endpoint"]
+    A --> E
+    E --> L["LM Studio or remote OpenAI-compatible model"]
 
-    style V fill:#e7f2eb,stroke:#276f52
-    style F fill:#eef4ff,stroke:#46648a
-    style G fill:#fff3df,stroke:#b57526
-    style L fill:#f0eafa,stroke:#75519c
+    style V fill:#eff6ff,stroke:#64748b
+    style F fill:#dbeafe,stroke:#475569
+    style G fill:#eff6ff,stroke:#2563eb
+    style A fill:#dbeafe,stroke:#2563eb
+    style R fill:#f8fafc,stroke:#64748b
+    style E fill:#eff6ff,stroke:#475569
 ```
 
-The browser never receives the LM Studio API configuration. It talks only to FastAPI. FastAPI
-owns model discovery, prompts, graph state, validation, error normalization, and the streamed
-run contract.
+The browser never receives model, Oracle, or SSH credentials. It talks only to FastAPI. FastAPI
+owns endpoint configuration, prompts, graph state, tool policy, validation, error normalization,
+logging, and the streamed run contract.
 
 ## Agent flow
 
@@ -88,6 +105,31 @@ The quality gate is deterministic: the critic returns `pass` or `revise`, and La
 the next edge. `AGENT_MAX_REVISIONS` caps the review loop, preventing an accidental infinite run.
 The default is one revision.
 
+For the **Software diagnostics** template, the execution node contains a second bounded agent loop:
+
+```mermaid
+flowchart TD
+    I["Incident objective and proposed checks"] --> A["LangChain create_agent"]
+    A --> D{"Enough evidence?"}
+    D -->|"No"| T{"Choose an enabled tool"}
+    T -->|"database"| O["oracle_select"]
+    T -->|"API"| R["rest_api_read"]
+    T -->|"host"| S["unix_system_snapshot"]
+    T -->|"service"| V["unix_service_status"]
+    T -->|"logs"| L["unix_tail_log / unix_search_log"]
+    O --> A
+    R --> A
+    S --> A
+    V --> A
+    L --> A
+    D -->|"Yes or access unavailable"| P["Evidence-backed diagnosis"]
+    P --> Q["LangGraph quality review and final edit"]
+```
+
+LangGraph controls the overall lifecycle and quality gate. LangChain provides model/tool
+selection within the diagnostic execution stage. The configured
+`DIAGNOSTICS_MAX_ITERATIONS` and LangGraph recursion limit bound that inner loop.
+
 ## Request lifecycle
 
 ```mermaid
@@ -95,13 +137,25 @@ sequenceDiagram
     participant UI as React UI
     participant API as FastAPI
     participant Graph as LangGraph
-    participant LM as LM Studio
+    participant Agent as LangChain diagnostics agent
+    participant Tool as Read-only diagnostic tool
+    participant LM as Model endpoint
 
     UI->>API: POST /api/runs
     API-->>UI: event: run
-    loop Each graph node
+    Graph->>LM: intake and investigation plan
+    LM-->>Graph: objective and plan
+    Graph->>Agent: execute diagnostic investigation
+    loop Until sufficient evidence or iteration limit
+        Agent->>LM: observations and available tools
+        LM-->>Agent: tool call or final diagnosis
+        Agent->>Tool: validated read-only operation
+        Tool-->>Agent: bounded structured observation
+    end
+    Agent-->>Graph: diagnostic report
+    loop Review and final edit
         Graph->>LM: OpenAI-compatible chat completion
-        LM-->>Graph: Local model response
+        LM-->>Graph: model response
         Graph-->>UI: event: step
     end
     Graph-->>UI: event: result
@@ -120,12 +174,18 @@ without polling.
 ├── backend/
 │   ├── app/
 │   │   ├── config.py       # Environment-backed settings
+│   │   ├── diagnostics.py  # LangChain diagnostic agent and tracing callbacks
 │   │   ├── graph.py        # LangGraph nodes, routing, and stream
-│   │   ├── llm.py          # LM Studio model discovery and completions
+│   │   ├── llm.py          # OpenAI-compatible model discovery and completions
 │   │   ├── logging_config.py # JSONL logging, rotation, and correlation context
 │   │   ├── main.py         # FastAPI app and SSE endpoint
 │   │   ├── models.py       # Validated API and workflow models
-│   │   └── templates.py    # Task templates
+│   │   ├── templates.py    # Task templates
+│   │   └── tools/
+│   │       ├── oracle.py   # Parsed, row-capped SELECT / WITH queries
+│   │       ├── rest_api.py # Allowlisted GET / HEAD requests
+│   │       ├── unix.py     # Fixed local and SSH inspection operations
+│   │       └── registry.py # Tool enablement and public status
 │   ├── tests/
 │   └── pyproject.toml
 ├── frontend/
@@ -154,6 +214,19 @@ Edit `backend/.env` after running setup:
 | `AGENT_MAX_TOKENS` | `1800` | Per-agent response ceiling |
 | `AGENT_MAX_REVISIONS` | `1` | Maximum critic/revision loops |
 | `CORS_ORIGINS` | local Vite origins | Comma-separated allowed browser origins |
+| `DIAGNOSTICS_ENABLED` | `true` | Master switch for all diagnostic tools |
+| `DIAGNOSTICS_MAX_ITERATIONS` | `8` | Maximum model/tool investigation iterations |
+| `DIAGNOSTICS_TOOL_TIMEOUT_SECONDS` | `30` | Per-tool timeout |
+| `DIAGNOSTICS_REST_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Exact hosts or `*.domain` patterns |
+| `DIAGNOSTICS_REST_MAX_RESPONSE_BYTES` | `1048576` | Maximum HTTP response body retained |
+| `DIAGNOSTICS_REST_HEADERS_JSON` | `{}` | Operator-supplied headers; use secrets carefully |
+| `ORACLE_DSN` | empty | Oracle Easy Connect string or configured alias |
+| `ORACLE_USER` | empty | Oracle diagnostic account |
+| `ORACLE_PASSWORD` | empty | Oracle diagnostic account password |
+| `ORACLE_MAX_ROWS` | `200` | Hard row cap for Oracle results |
+| `DIAGNOSTICS_LOCAL_LOG_ROOTS` | `logs,/var/log` | Local paths the log tools may inspect |
+| `DIAGNOSTICS_MAX_LOG_BYTES` | `2097152` | Maximum trailing log window searched |
+| `DIAGNOSTICS_UNIX_HOSTS_JSON` | `{}` | Named SSH targets and their allowed log roots |
 | `LOG_LEVEL` | `DEBUG` | Minimum severity written to the log file |
 | `LOG_FILE` | `logs/agentic-flow.log` | Absolute path or path relative to `backend/` |
 | `LOG_MAX_BYTES` | `10485760` | Rotate the active log after this many bytes |
@@ -163,6 +236,83 @@ Edit `backend/.env` after running setup:
 The planning and critic stages use lower temperatures in code so their JSON decisions remain
 stable. They also use LM Studio's JSON-schema-constrained structured output, followed by Pydantic
 validation. The execution and revision stages use the configured creative temperature.
+
+## Diagnostics configuration
+
+The diagnostic agent receives only tools enabled by backend configuration. The UI shows their
+current status when **Software diagnostics** is selected, and `GET /api/tools` exposes the same
+read-only status to operators.
+
+### REST API inspection
+
+Only `GET` and `HEAD` are supported. Redirects are returned as observations but never followed,
+credentials embedded in URLs are rejected, and every destination must match the host allowlist.
+
+```dotenv
+DIAGNOSTICS_REST_ALLOWED_HOSTS=localhost,127.0.0.1,orders.internal,*.svc.internal
+DIAGNOSTICS_REST_HEADERS_JSON={"Authorization":"Bearer replace-at-deployment"}
+DIAGNOSTICS_REST_MAX_RESPONSE_BYTES=1048576
+```
+
+An allowlist entry matches only the hostname, not arbitrary lookalike suffixes.
+`*.svc.internal` matches `orders.svc.internal` but not `svc.internal`.
+
+### Oracle inspection
+
+Set all three connection values to enable `oracle_select`:
+
+```dotenv
+ORACLE_DSN=db.internal.example:1521/APPDB
+ORACLE_USER=diagnostic_reader
+ORACLE_PASSWORD=replace-at-deployment
+ORACLE_MAX_ROWS=200
+```
+
+The tool parses Oracle SQL with SQLGlot, accepts exactly one `SELECT` or `WITH` query, rejects
+DML, DDL, PL/SQL, multiple statements, and `SELECT INTO`, requires bind values to be supplied
+separately, applies a call timeout, and caps returned rows.
+
+> **Required database control:** connect with an Oracle account that has only the minimum
+> `SELECT` privileges needed for diagnostics. SQL parsing is defense in depth, not a substitute
+> for database authorization; Oracle functions and views can have behavior beyond their visible
+> query text.
+
+### Unix hosts, services, and logs
+
+Local inspection is enabled by default and is limited to fixed operations: a system snapshot,
+bounded tail, literal log search, and systemd status/journal lookup. There is no arbitrary shell
+tool. Local log paths must remain under `DIAGNOSTICS_LOCAL_LOG_ROOTS`.
+
+Remote access uses operator-defined aliases. The model chooses an alias such as `prod-app-1`; it
+never supplies a hostname, username, key, or arbitrary command. Host-key verification and allowed
+log roots are mandatory:
+
+```dotenv
+DIAGNOSTICS_LOCAL_LOG_ROOTS=logs,/var/log/my-company
+DIAGNOSTICS_UNIX_HOSTS_JSON={"prod-app-1":{"host":"10.20.0.15","port":22,"username":"diagnostic","client_keys":["/secure/keys/diagnostic_ed25519"],"known_hosts":"/secure/ssh/known_hosts","log_roots":["/var/log/order-api"]}}
+```
+
+Give the SSH identity read-only filesystem permissions and only the operating-system permissions
+needed for service inspection. Password authentication is supported in configuration but SSH
+keys with a restricted account are preferred.
+
+### Model endpoints
+
+The historical `LMSTUDIO_*` variable names are retained for compatibility, but the client uses
+the standard OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints. A remote HTTPS
+service works without code changes:
+
+```dotenv
+LMSTUDIO_BASE_URL=https://llm-gateway.example.com/v1
+LMSTUDIO_API_KEY=replace-at-deployment
+LMSTUDIO_MODEL=your-openai-compatible-model-id
+```
+
+HTTPS certificate verification is enabled by the HTTP clients. The provider must support
+OpenAI-compatible chat completions, tool calls for diagnostics, and preferably JSON-schema
+structured output for planning and review. Configuring an external endpoint means prompts, tool
+observations, and final results leave the local machine; apply the provider's data-handling and
+credential policies.
 
 ## Backend logs
 
@@ -222,13 +372,16 @@ Every record includes:
 The instrumentation covers application startup/shutdown, every HTTP request, task and health
 lookups, run acceptance, each emitted SSE event, client disconnects, every LangGraph node and
 state update, quality-gate routing, LM Studio discovery and health, completion parameters,
-structured-output recovery, response finish reasons, token usage, and final run results.
+structured-output recovery, response finish reasons, token usage, LangChain model turns, tool
+arguments, bounded tool results, tool durations and failures, and final run results.
 
 > **Privacy:** `LOG_INCLUDE_CONTENT=true` records full prompts, context, system instructions,
 > intermediate drafts, critiques, and final answers. This is useful for local development and
 > debugging but may store sensitive text on disk. Set it to `false` in `backend/.env` for
 > metadata-only logs; character counts, timing, routing, token usage, and errors remain available.
-> API keys and authorization headers are never logged.
+> Model API keys are never logged. Diagnostic tool arguments and results are deliberately logged
+> when content logging is enabled, so do not place secrets in URLs, SQL text, log files, or task
+> prompts. `DIAGNOSTICS_REST_HEADERS_JSON` is not included in tool-call arguments.
 
 ## API
 
@@ -252,6 +405,23 @@ loaded model.
 ### `GET /api/tasks`
 
 Returns the task templates used to construct the frontend cards and starter prompts.
+
+### `GET /api/tools`
+
+Returns every diagnostic capability, its category, whether it is currently enabled, its
+read-only access mode, and a non-secret configuration summary.
+
+```json
+[
+  {
+    "name": "oracle_select",
+    "category": "database",
+    "enabled": false,
+    "access": "read-only",
+    "detail": "Disabled until ORACLE_DSN, ORACLE_USER, and ORACLE_PASSWORD are set."
+  }
+]
+```
 
 ### `POST /api/runs`
 
@@ -283,6 +453,19 @@ curl -N http://127.0.0.1:8000/api/runs \
   }'
 ```
 
+Run an evidence-gathering diagnostic:
+
+```bash
+curl -N http://127.0.0.1:8000/api/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "task_id": "diagnose",
+    "prompt": "Inspect http://127.0.0.1:8000/api/health and the latest backend application log. Correlate any errors from the last 15 minutes.",
+    "context": "The backend log is backend/logs/agentic-flow.log.",
+    "constraints": ["Use read-only evidence", "Label unavailable evidence"]
+  }'
+```
+
 ## Commands
 
 ```bash
@@ -306,6 +489,8 @@ npm --prefix frontend run build
 
 - **LangGraph rather than a single prompt:** individual stages have narrow responsibilities, the
   quality gate is observable, and revision is bounded.
+- **LangChain inside the diagnostics node:** tool selection and observation loops use the current
+  LangChain agent API without replacing the visible LangGraph lifecycle.
 - **OpenAI-compatible client rather than a cloud SDK integration:** LM Studio exposes the same
   chat-completions shape locally, while model discovery removes a common setup failure.
 - **SSE over WebSockets:** runs are server-to-client progress streams after one request; they do
@@ -313,9 +498,11 @@ npm --prefix frontend run build
 - **Pydantic at every boundary:** malformed requests, plans, and critiques fail explicitly instead
   of silently corrupting later graph state.
 - **Structured, correlated logs:** JSONL events connect an HTTP request to its streamed run,
-  individual graph nodes, and LM Studio calls without depending on a hosted observability service.
-- **No autonomous tool execution:** task text is untrusted input. The workflow generates answers
-  but does not run model-authored shell commands or access arbitrary files.
+  individual graph nodes, model calls, and diagnostic operations without depending on a hosted
+  observability service.
+- **Capability-based diagnostic access:** the model can choose only registered tools. Oracle is
+  query-only and row-capped, REST is allowlisted and read-only, Unix access uses named targets and
+  fixed inspection commands, and log access is root-confined and bounded.
 
 ## Troubleshooting
 
@@ -344,3 +531,16 @@ reduce `AGENT_MAX_TOKENS`, or set `AGENT_MAX_REVISIONS=0` during rapid iteration
 
 The Vite proxy expects the API on `127.0.0.1:8000`. If you change `BACKEND_PORT`, also change the
 proxy target in `frontend/vite.config.ts`.
+
+### A diagnostic tool is shown as “Not configured”
+
+Check `curl http://127.0.0.1:8000/api/tools`, update `backend/.env`, and restart the backend.
+Oracle requires all three connection settings. REST requires a non-empty allowed-host list.
+Remote Unix inspection requires a named host entry with `host`, `username`, `known_hosts`, and
+`log_roots`.
+
+### The model describes checks but does not call tools
+
+Use a chat model with reliable OpenAI-compatible tool calling. Include explicit targets in the
+request: the registered SSH alias, allowed URL, configured Oracle view/query goal, or log path.
+The agent intentionally reports missing access rather than guessing targets.
