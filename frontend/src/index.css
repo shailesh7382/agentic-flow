@@ -1,17 +1,16 @@
 :root {
   font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  color: #18221b;
-  background: #f7f8f3;
+  color: #172033;
+  background: #f5f8fc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #18221b;
-  --muted: #68716a;
-  --line: #dfe3dc;
+  --ink: #172033;
+  --muted: #66758a;
+  --line: #d9e2ec;
   --card: #ffffff;
-  --accent: #276f52;
-  --accent-dark: #18543d;
-  --accent-soft: #e7f2eb;
-  --warm: #f2ae53;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --accent-soft: #eaf2ff;
 }
 
 * {
@@ -27,10 +26,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 80% 2%, rgba(242, 174, 83, 0.12), transparent 23rem),
-    linear-gradient(rgba(39, 111, 82, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(39, 111, 82, 0.025) 1px, transparent 1px),
-    #f7f8f3;
+    radial-gradient(circle at 80% 2%, rgba(37, 99, 235, 0.11), transparent 23rem),
+    linear-gradient(rgba(71, 85, 105, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(71, 85, 105, 0.035) 1px, transparent 1px),
+    #f5f8fc;
   background-size: auto, 32px 32px, 32px 32px, auto;
 }
 
@@ -53,8 +52,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(24, 34, 27, 0.1);
-  background: rgba(247, 248, 243, 0.85);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.1);
+  background: rgba(245, 248, 252, 0.88);
   backdrop-filter: blur(16px);
   position: sticky;
   top: 0;
@@ -79,7 +78,7 @@ button {
   color: white;
   background: var(--accent);
   border-radius: 10px 10px 10px 4px;
-  box-shadow: 0 5px 15px rgba(39, 111, 82, 0.22);
+  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.22);
 }
 
 .status-pill {
@@ -108,64 +107,23 @@ button {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #c75050;
-  box-shadow: 0 0 0 3px rgba(199, 80, 80, 0.12);
+  background: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
 }
 
 .status-pill.connected .status-dot {
-  background: #31a46c;
-  box-shadow: 0 0 0 3px rgba(49, 164, 108, 0.13);
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
 }
 
 main {
   padding: 0 22px;
 }
 
-.hero {
-  max-width: 850px;
-  margin: 0 auto;
-  padding: 88px 0 58px;
-  text-align: center;
-}
-
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 11px;
-  color: var(--accent-dark);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.015em;
-  text-transform: uppercase;
-}
-
-.hero h1 {
-  margin: 23px 0 16px;
-  color: var(--ink);
-  font-size: clamp(42px, 6vw, 72px);
-  font-weight: 800;
-  line-height: 0.98;
-  letter-spacing: -0.065em;
-}
-
-.hero h1 span {
-  color: var(--accent);
-}
-
-.hero p {
-  max-width: 650px;
-  margin: 0 auto;
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1.7;
-}
-
 .workspace {
   max-width: 1180px;
   margin: 0 auto;
+  padding-top: 56px;
 }
 
 .task-section,
@@ -229,14 +187,14 @@ main {
 
 .task-card:hover {
   transform: translateY(-2px);
-  border-color: #b9c8bf;
-  box-shadow: 0 10px 28px rgba(27, 45, 34, 0.07);
+  border-color: #b8c7dc;
+  box-shadow: 0 10px 28px rgba(30, 64, 115, 0.08);
 }
 
 .task-card.active {
   border-color: var(--accent);
-  background: #fbfefc;
-  box-shadow: 0 0 0 2px rgba(39, 111, 82, 0.09), 0 12px 30px rgba(27, 70, 48, 0.08);
+  background: #fbfdff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1), 0 12px 30px rgba(30, 64, 175, 0.09);
 }
 
 .task-icon {
@@ -286,7 +244,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--card);
-  box-shadow: 0 18px 50px rgba(36, 55, 43, 0.07);
+  box-shadow: 0 18px 50px rgba(30, 64, 115, 0.08);
 }
 
 .composer-card > label {
@@ -306,9 +264,9 @@ textarea {
   resize: vertical;
   padding: 14px 15px;
   color: var(--ink);
-  border: 1px solid #d9ded7;
+  border: 1px solid #d6e0ec;
   border-radius: 11px;
-  background: #fbfcfa;
+  background: #fbfdff;
   line-height: 1.6;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -316,11 +274,11 @@ textarea {
 
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(39, 111, 82, 0.1);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.11);
 }
 
 textarea::placeholder {
-  color: #9ba29c;
+  color: #94a3b8;
 }
 
 .details-toggle {
@@ -330,9 +288,9 @@ textarea::placeholder {
   justify-content: space-between;
   padding: 13px 22px;
   border: 0;
-  border-top: 1px solid #edf0eb;
-  border-bottom: 1px solid #edf0eb;
-  background: #fafbf8;
+  border-top: 1px solid #e9eef5;
+  border-bottom: 1px solid #e9eef5;
+  background: #f8fafd;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -348,7 +306,7 @@ textarea::placeholder {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   padding: 20px 22px;
-  background: #fafbf8;
+  background: #f8fafd;
 }
 
 .detail-fields label {
@@ -381,7 +339,7 @@ textarea::placeholder {
 }
 
 .privacy-note strong {
-  color: #4f5951;
+  color: #526176;
 }
 
 .privacy-icon {
@@ -409,7 +367,7 @@ textarea::placeholder {
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 7px 18px rgba(39, 111, 82, 0.22);
+  box-shadow: 0 7px 18px rgba(37, 99, 235, 0.23);
   transition: transform 150ms ease, background 150ms ease;
 }
 
@@ -424,8 +382,8 @@ textarea::placeholder {
 }
 
 .stop-button {
-  color: #943d3d;
-  background: #faeaea;
+  color: #334155;
+  background: #e8eef6;
   box-shadow: none;
 }
 
@@ -487,7 +445,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #929992;
+  color: #8a99ad;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -498,8 +456,8 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid #d9ddd7;
-  background: #f5f6f3;
+  border: 1px solid #d7e0eb;
+  background: #f3f6fa;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 9px;
 }
@@ -529,7 +487,7 @@ textarea::placeholder {
   width: clamp(16px, 2.8vw, 42px);
   height: 1px;
   margin: 0 8px;
-  background: #dfe3dd;
+  background: #d9e2ec;
 }
 
 .error-box,
@@ -538,10 +496,10 @@ textarea::placeholder {
   gap: 10px;
   margin-top: 20px;
   padding: 14px;
-  color: #813b3b;
-  border: 1px solid #edcaca;
+  color: #334155;
+  border: 1px solid #c8d5e5;
   border-radius: 11px;
-  background: #fff3f2;
+  background: #eef4fb;
   font-size: 12px;
 }
 
@@ -626,11 +584,11 @@ textarea::placeholder {
 .answer-card {
   min-height: 420px;
   padding: clamp(24px, 5vw, 54px);
-  box-shadow: 0 20px 50px rgba(36, 55, 43, 0.06);
+  box-shadow: 0 20px 50px rgba(30, 64, 115, 0.07);
 }
 
 .markdown-body {
-  color: #26312a;
+  color: #2f3c50;
   font-size: 14px;
   line-height: 1.78;
 }
@@ -664,7 +622,7 @@ textarea::placeholder {
 .markdown-body code {
   padding: 2px 5px;
   border-radius: 5px;
-  background: #eff3ef;
+  background: #edf2f8;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.88em;
 }
@@ -673,8 +631,8 @@ textarea::placeholder {
   overflow-x: auto;
   padding: 16px;
   border-radius: 10px;
-  color: #e8f0ea;
-  background: #19231d;
+  color: #eaf2ff;
+  background: #172033;
 }
 
 .markdown-body pre code {
@@ -730,7 +688,7 @@ textarea::placeholder {
   grid-template-columns: 80px 1fr;
   gap: 10px;
   padding: 8px 0;
-  border-top: 1px solid #edf0eb;
+  border-top: 1px solid #e9eef5;
 }
 
 .summary-card dt {
@@ -786,7 +744,7 @@ footer {
   padding: 24px 22px 36px;
   display: flex;
   justify-content: space-between;
-  color: #858d86;
+  color: #7c8ba1;
   border-top: 1px solid var(--line);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
@@ -826,12 +784,8 @@ footer {
     padding: 0 14px;
   }
 
-  .hero {
-    padding: 58px 0 44px;
-  }
-
-  .hero h1 {
-    font-size: 43px;
+  .workspace {
+    padding-top: 36px;
   }
 
   .task-grid,

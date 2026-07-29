@@ -17,7 +17,6 @@ import {
   Sparkles,
   WandSparkles,
   X,
-  Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -170,20 +169,6 @@ function App() {
       </header>
 
       <main>
-        <section className="hero">
-          <div className="eyebrow">
-            <Zap size={14} fill="currentColor" />
-            Private by design · runs on your machine
-          </div>
-          <h1>
-            One goal. <span>Six focused agents.</span>
-          </h1>
-          <p>
-            Choose a workflow, describe the outcome, and watch a local model plan, create,
-            critique, and refine the result.
-          </p>
-        </section>
-
         <section className="workspace">
           <div className="task-section">
             <div className="section-heading">
@@ -428,4 +413,3 @@ function App() {
 }
 
 export default App;
-
