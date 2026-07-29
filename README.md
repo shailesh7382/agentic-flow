@@ -121,6 +121,7 @@ without polling.
 │   │   ├── config.py       # Environment-backed settings
 │   │   ├── graph.py        # LangGraph nodes, routing, and stream
 │   │   ├── llm.py          # LM Studio model discovery and completions
+│   │   ├── logging_config.py # JSONL logging, rotation, and correlation context
 │   │   ├── main.py         # FastAPI app and SSE endpoint
 │   │   ├── models.py       # Validated API and workflow models
 │   │   └── templates.py    # Task templates
@@ -152,10 +153,81 @@ Edit `backend/.env` after running setup:
 | `AGENT_MAX_TOKENS` | `1800` | Per-agent response ceiling |
 | `AGENT_MAX_REVISIONS` | `1` | Maximum critic/revision loops |
 | `CORS_ORIGINS` | local Vite origins | Comma-separated allowed browser origins |
+| `LOG_LEVEL` | `DEBUG` | Minimum severity written to the log file |
+| `LOG_FILE` | `logs/agentic-flow.log` | Absolute path or path relative to `backend/` |
+| `LOG_MAX_BYTES` | `10485760` | Rotate the active log after this many bytes |
+| `LOG_BACKUP_COUNT` | `5` | Number of rotated log files to retain |
+| `LOG_INCLUDE_CONTENT` | `true` | Include prompts, context, drafts, and answers |
 
 The planning and critic stages use lower temperatures in code so their JSON decisions remain
 stable. They also use LM Studio's JSON-schema-constrained structured output, followed by Pydantic
 validation. The execution and revision stages use the configured creative temperature.
+
+## Backend logs
+
+The backend writes exhaustive structured logs to `backend/logs/agentic-flow.log`. Each physical
+line is one JSON object, making the file readable with ordinary command-line tools and directly
+ingestible by systems such as Loki, Elasticsearch, Vector, or Fluent Bit.
+
+The active file rotates automatically at 10 MB. Five backups are retained by default:
+
+```text
+backend/logs/agentic-flow.log
+backend/logs/agentic-flow.log.1
+backend/logs/agentic-flow.log.2
+...
+```
+
+Follow all events:
+
+```bash
+tail -f backend/logs/agentic-flow.log | jq .
+```
+
+Follow one run:
+
+```bash
+tail -f backend/logs/agentic-flow.log \
+  | jq --arg run_id "PASTE-RUN-ID" 'select(.run_id == $run_id)'
+```
+
+Show errors with their complete stack traces:
+
+```bash
+jq 'select(.level == "ERROR" or .level == "CRITICAL")' \
+  backend/logs/agentic-flow.log
+```
+
+Summarize local-model latency and token usage:
+
+```bash
+jq 'select(.event == "lmstudio.completion.completed")
+    | {
+        run_id,
+        node: .agent_node,
+        duration_ms: .details.duration_ms,
+        usage: .details.usage
+      }' backend/logs/agentic-flow.log
+```
+
+Every record includes:
+
+- UTC timestamp, severity, logger name, event name, and message
+- request, run, and current agent-node correlation IDs
+- process, thread, source file, source line, and function
+- event-specific details such as duration, HTTP status, model, routing decision, and token usage
+- exception type, message, and full stack trace when an operation fails
+
+The instrumentation covers application startup/shutdown, every HTTP request, task and health
+lookups, run acceptance, each emitted SSE event, client disconnects, every LangGraph node and
+state update, quality-gate routing, LM Studio discovery and health, completion parameters,
+structured-output recovery, response finish reasons, token usage, and final run results.
+
+> **Privacy:** `LOG_INCLUDE_CONTENT=true` records full prompts, context, system instructions,
+> intermediate drafts, critiques, and final answers. This is useful for local development and
+> debugging but may store sensitive text on disk. Set it to `false` in `backend/.env` for
+> metadata-only logs; character counts, timing, routing, token usage, and errors remain available.
+> API keys and authorization headers are never logged.
 
 ## API
 
@@ -239,6 +311,8 @@ npm --prefix frontend run build
   not need a bidirectional socket protocol.
 - **Pydantic at every boundary:** malformed requests, plans, and critiques fail explicitly instead
   of silently corrupting later graph state.
+- **Structured, correlated logs:** JSONL events connect an HTTP request to its streamed run,
+  individual graph nodes, and LM Studio calls without depending on a hosted observability service.
 - **No autonomous tool execution:** task text is untrusted input. The workflow generates answers
   but does not run model-authored shell commands or access arbitrary files.
 
