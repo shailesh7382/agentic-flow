@@ -116,6 +116,7 @@ without polling.
 
 ```text
 .
+├── SAMPLE_INTERACTION.md   # Annotated prompts and responses from a real run
 ├── backend/
 │   ├── app/
 │   │   ├── config.py       # Environment-backed settings
